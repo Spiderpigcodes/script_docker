@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Function to install Docker
 install_docker() {
     sudo apt-get update
     sudo apt-get install -y ca-certificates curl
@@ -11,6 +12,7 @@ install_docker() {
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 }
 
+# Function to check if Docker is installed and install it if not
 installation_docker_client() {
     if ! command -v docker &>/dev/null; then
         echo "Docker wird installiert"
@@ -20,11 +22,13 @@ installation_docker_client() {
     fi
 }
 
+# Function to fix dpkg configuration issues
 fix_dpkg() {
     sudo rm /var/lib/dpkg/updates/*
     sudo dpkg --configure -a
 }
 
+# Function to handle the installation process on a slave
 installation_slave() {
     echo "Gib die IP des Slaves an"
     read -r ip_slave
@@ -35,18 +39,31 @@ installation_slave() {
     echo "Gib das Passwort ein"
     read -s pw_slave
 
-    # Temporäre Datei für die Funktionsdefinitionen erstellen
+    # Create a temporary script file
     temp_script=$(mktemp)
     declare -f install_docker installation_docker_client fix_dpkg > "$temp_script"
     echo 'fix_dpkg' >> "$temp_script"
     echo 'installation_docker_client' >> "$temp_script"
 
-    # Skript zum Slave übertragen und ausführen
+    # Copy the script to the remote machine and execute it
     sshpass -p "$pw_slave" scp "$temp_script" "$user_slave@$ip_slave:/tmp/install_docker.sh"
     sshpass -p "$pw_slave" ssh -t "$user_slave@$ip_slave" "sudo bash /tmp/install_docker.sh"
     
-    # Temporäre Datei löschen
+    # Remove the temporary script file
     rm -f "$temp_script"
 }
 
-installation_slave
+# Main function to install Docker on multiple clients
+main() {
+    while true; do
+        installation_slave
+        echo "Möchten Sie Docker auf einem weiteren Client installieren? (ja/nein)"
+        read -r answer
+        if [[ $answer != "ja" ]]; then
+            break
+        fi
+    done
+}
+
+# Run the main function
+main
