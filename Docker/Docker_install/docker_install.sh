@@ -44,6 +44,7 @@ installation_slave() {
     declare -f install_docker installation_docker_client fix_dpkg > "$temp_script"
     echo 'fix_dpkg' >> "$temp_script"
     echo 'installation_docker_client' >> "$temp_script"
+    echo "sudo docker swarm join --token $swarm_token $manager_ip:2377" >> "$temp_script"
 
     # Copy the script to the remote machine and execute it
     sshpass -p "$pw_slave" scp "$temp_script" "$user_slave@$ip_slave:/tmp/install_docker.sh"
@@ -53,8 +54,29 @@ installation_slave() {
     rm -f "$temp_script"
 }
 
-# Main function to install Docker on multiple clients
+# Function to initialize Docker Swarm on the host
+initialize_swarm() {
+    if ! docker info | grep -q "Swarm: active"; then
+        sudo docker swarm init --advertise-addr "$(hostname -I | awk '{print $1}')"
+        echo "Docker Swarm initialized on the host."
+    else
+        echo "Docker Swarm is already initialized."
+    fi
+}
+
+# Function to get the Swarm join token
+get_swarm_token() {
+    swarm_token=$(sudo docker swarm join-token -q worker)
+    manager_ip=$(hostname -I | awk '{print $1}')
+}
+
+# Main function to install Docker on multiple clients and manage Swarm
 main() {
+    # Initialize Swarm on the host
+    initialize_swarm
+    # Get the Swarm join token
+    get_swarm_token
+
     while true; do
         installation_slave
         echo "Möchten Sie Docker auf einem weiteren Client installieren? (ja/nein)"
