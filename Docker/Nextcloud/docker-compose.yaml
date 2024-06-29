@@ -8,10 +8,10 @@ services:
     volumes:
       - db:/var/lib/mysql
     environment:
-      - MYSQL_ROOT_PASSWORD=Thiersee52
-      - MYSQL_PASSWORD=Thiersee52
-      - MYSQL_DATABASE=nextcloud
-      - MYSQL_USER=nextcloud
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
     networks:
       - nextcloud
 
@@ -21,9 +21,9 @@ services:
       restart_policy:
         condition: unless-stopped
     environment:
-      PMA_HOST: db
-      PMA_PORT: 3306
-      PMA_ARBITRARY: 1
+      PMA_HOST: ${PMA_HOST}
+      PMA_PORT: ${PMA_PORT}
+      PMA_ARBITRARY: ${PMA_ARBITRARY}
     ports:
       - 8081:80
     depends_on:
@@ -40,10 +40,10 @@ services:
       - nextcloud:/var/www/html
       - /mnt/shared_nvme/nextcloud_data:/var/www/html/data
     environment:
-      - MYSQL_PASSWORD=Thiersee52
-      - MYSQL_DATABASE=nextcloud
-      - MYSQL_USER=nextcloud
-      - MYSQL_HOST=db
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_HOST=${MYSQL_HOST}
     networks:
       - nextcloud
 
