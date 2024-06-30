@@ -40,6 +40,7 @@ services:
     volumes:
       - nextcloud:/var/www/html
       - /mnt/shared_nvme/nextcloud_data:/var/www/html/data
+      - /mnt/shared_nvme/nextcloud_data/config:/var/www/html/config
     environment:
       - MYSQL_PASSWORD=Thiersee52
       - MYSQL_DATABASE=nextcloud
