@@ -10,6 +10,11 @@ install_docker() {
     echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     sudo apt-get update
     sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    # Ensure Docker is in the PATH
+    if ! command -v docker &>/dev/null; then
+        export PATH=$PATH:/usr/bin
+    fi
 }
 
 # Function to check if Docker is installed and install it if not
@@ -57,6 +62,16 @@ installation_slave() {
 
 # Function to initialize Docker Swarm on the host
 initialize_swarm() {
+    if ! command -v docker &>/dev/null; then
+        echo "Docker wird installiert"
+        install_docker
+    fi
+    
+    if ! command -v docker &>/dev/null; then
+        echo "Docker ist nicht korrekt installiert, bitte überprüfen Sie die Installation."
+        exit 1
+    fi
+    
     if ! docker info | grep -q "Swarm: active"; then
         sudo docker swarm init --advertise-addr "$(hostname -I | awk '{print $1}')"
         echo "Docker Swarm initialized on the host."
