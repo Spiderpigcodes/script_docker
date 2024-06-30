@@ -52,16 +52,17 @@ sudo bash -c "echo '$NFS_SERVER_IP:$NFS_EXPORT_DIR $MOUNT_POINT nfs defaults 0 0
 
 # Bash-Skript auf dem Remote-Client erstellen
 sudo bash -c "cat <<'EOL' > /usr/local/bin/remount_nfs.sh
+
 #!/bin/bash
 
 MOUNT_POINT='/mnt/shared_nvme'
 NFS_SERVER_IP='10.10.1.253'
 NFS_EXPORT_DIR='/mnt/shared_nvme'
 
-if ! mountpoint -q "\$MOUNT_POINT"; then
+if ! mountpoint -q "$MOUNT_POINT"; then
     echo 'NFS mount not found, attempting to remount...'
-    sudo mount -t nfs "\$NFS_SERVER_IP:\$NFS_EXPORT_DIR" "\$MOUNT_POINT"
-    if mountpoint -q "\$MOUNT_POINT"; then
+    sudo mount -t nfs "$NFS_SERVER_IP:$NFS_EXPORT_DIR" "$MOUNT_POINT"
+    if mountpoint -q "$MOUNT_POINT"; then
         echo 'NFS successfully remounted.'
     else
         echo 'Failed to remount NFS.'
@@ -69,6 +70,7 @@ if ! mountpoint -q "\$MOUNT_POINT"; then
 else
     echo 'NFS is already mounted.'
 fi
+
 EOL"
 
 # Skript ausführbar machen
