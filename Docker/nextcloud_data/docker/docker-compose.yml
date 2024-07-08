@@ -8,9 +8,9 @@ services:
     volumes:
       - /mnt/shared_nvme/nextcloud_data/db:/var/lib/mysql
     environment:
-      - MARIADB_ROOT_PASSWORD=Thiersee52
-      - MYSQL_ROOT_PASSWORD=Thiersee52
-      - MYSQL_PASSWORD=Thiersee52
+      - MARIADB_ROOT_PASSWORD=
+      - MYSQL_ROOT_PASSWORD=
+      - MYSQL_PASSWORD=
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
     networks:
@@ -42,7 +42,7 @@ services:
       - /mnt/shared_nvme/nextcloud_data/data:/var/www/html/data
       - /mnt/shared_nvme/nextcloud_data/config:/var/www/html/config
     environment:
-      - MYSQL_PASSWORD=Thiersee52
+      - MYSQL_PASSWORD=
       - MYSQL_DATABASE=nextcloud
       - MYSQL_USER=nextcloud
       - MYSQL_HOST=db
