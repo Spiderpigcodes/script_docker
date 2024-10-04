@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Variablen
+# Global Variables
 NVME_DEVICE="/dev/nvme0n1"
 MOUNT_POINT="/mnt/shared_nvme"
 NFS_EXPORT_DIR="$MOUNT_POINT"
@@ -8,11 +8,13 @@ NFS_CLIENT_MOUNT_POINT="$MOUNT_POINT"
 NFS_SERVER_IP=$(hostname -I | awk '{print $1}')
 FSTAB_ENTRY="$NVME_DEVICE $MOUNT_POINT ext4 defaults 0 0"
 
-# Benutzer nach Passwort fragen
-read -s -p "Bitte geben Sie das sudo Passwort ein: " USER_PASSWORD
-echo
+# Function to prompt user for sudo password
+prompt_sudo_password() {
+    read -s -p "Bitte geben Sie das sudo Passwort ein: " USER_PASSWORD
+    echo
+}
 
-# Temporäre Sudoers-Datei erstellen
+# Function to create temporary sudoers file
 create_sudoers_temp() {
     local temp_sudoers
     temp_sudoers=$(mktemp)
@@ -21,12 +23,12 @@ create_sudoers_temp() {
     rm "$temp_sudoers"
 }
 
-# Temporäre Sudoers-Datei entfernen
+# Function to remove temporary sudoers file
 remove_sudoers_temp() {
     echo "$USER_PASSWORD" | sudo -S rm /etc/sudoers.d/temporary_sudoers
 }
 
-# Funktion zur Konfiguration eines Remote-Clients
+# Function to configure a remote client
 configure_remote_client() {
     local client_ip=$1
     local client_user=$2
@@ -105,6 +107,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable remount_nfs.timer
 sudo systemctl start remount_nfs.timer
 EOF
+
     if [ $? -eq 0 ]; then
         echo "Remote-Client erfolgreich konfiguriert und NFS gemountet."
     else
@@ -112,87 +115,99 @@ EOF
     fi
 }
 
-# Sudoers für Host temporär konfigurieren
-create_sudoers_temp
-
-# Abfrage, ob das Laufwerk formatiert werden soll
-read -p "Soll das Laufwerk $NVME_DEVICE formatiert werden? (ja/nein): " format_drive
-if [[ $format_drive == "ja" || $format_drive == "Ja" ]]; then
-    echo "Formatiere NVMe..."
-    echo "$USER_PASSWORD" | sudo -S mkfs.ext4 "$NVME_DEVICE"
-fi
-
-# NFS-Freigabe zur /etc/fstab hinzufügen auf dem Host
-if ! grep -qs "$FSTAB_ENTRY" /etc/fstab; then
-    echo "Füge NVMe-Freigabe zur /etc/fstab hinzu..."
-    echo "$FSTAB_ENTRY" | sudo tee -a /etc/fstab > /dev/null
-fi
-
-# NVMe mounten
-echo "Mounten der NVMe..."
-sudo mkdir -p "$MOUNT_POINT"
-echo "$USER_PASSWORD" | sudo -S mount "$NVME_DEVICE" "$MOUNT_POINT"
-
-# NFS Export-Verzeichnis konfigurieren
-echo "Konfigurieren des NFS-Exports..."
-if ! dpkg -l | grep -q nfs-kernel-server; then
-    echo "$USER_PASSWORD" | sudo -S apt-get update
-    echo "$USER_PASSWORD" | sudo -S apt-get install -y nfs-kernel-server
-fi
-echo "$NFS_EXPORT_DIR *(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports
-
-# Verzeichnisberechtigungen setzen
-echo "Setze Verzeichnisberechtigungen..."
-sudo chown -R nobody:nogroup "$NFS_EXPORT_DIR"
-sudo chmod -R 777 "$NFS_EXPORT_DIR"
-
-# NFS Dienst aktivieren und starten
-echo "NFS-Dienst aktivieren und starten..."
-echo "$USER_PASSWORD" | sudo -S systemctl enable nfs-kernel-server
-echo "$USER_PASSWORD" | sudo -S systemctl start nfs-kernel-server
-echo "$USER_PASSWORD" | sudo -S exportfs -a
-
-# Überprüfung des NFS-Dienststatus und Neustart falls nötig
-if ! systemctl is-active --quiet nfs-kernel-server; then
-    echo "NFS-Dienst läuft nicht, versuche Neustart..."
-    echo "$USER_PASSWORD" | sudo -S systemctl restart nfs-kernel-server
-    if [ $? -ne 0 ]; then
-        echo "NFS-Dienst konnte nicht neu gestartet werden."
-        remove_sudoers_temp
-        exit 1
-    else
-        echo "NFS-Dienst erfolgreich neu gestartet."
+# Function to format the NVMe drive
+format_nvme_drive() {
+    local format_drive
+    read -p "Soll das Laufwerk $NVME_DEVICE formatiert werden? (ja/nein): " format_drive
+    if [[ $format_drive == "ja" || $format_drive == "Ja" ]]; then
+        echo "Formatiere NVMe..."
+        echo "$USER_PASSWORD" | sudo -S mkfs.ext4 "$NVME_DEVICE"
     fi
-else
-    echo "NFS-Dienst läuft."
-fi
+}
 
-# Firewall konfigurieren
-echo "Konfigurieren der Firewall..."
-echo "$USER_PASSWORD" | sudo -S ufw allow from any to any port nfs
-echo "$USER_PASSWORD" | sudo -S ufw allow from any to any port 2049
+# Function to add NVMe to fstab and mount
+mount_nvme_drive() {
+    if ! grep -qs "$FSTAB_ENTRY" /etc/fstab; then
+        echo "Füge NVMe-Freigabe zur /etc/fstab hinzu..."
+        echo "$FSTAB_ENTRY" | sudo tee -a /etc/fstab > /dev/null
+    fi
+    echo "Mounten der NVMe..."
+    sudo mkdir -p "$MOUNT_POINT"
+    echo "$USER_PASSWORD" | sudo -S mount "$NVME_DEVICE" "$MOUNT_POINT"
+}
 
-# Abfrage, ob ein weiterer Remote-Client eingerichtet werden soll
-while true; do
-    read -p "Möchten Sie einen weiteren Remote-Client einrichten? (ja/nein): " yn
-    case $yn in
-        [Jj]* )
-            read -p "Geben Sie die IP-Adresse des weiteren Remote-Clients ein: " NFS_CLIENT_IP
-            read -p "Geben Sie den Benutzernamen des weiteren Remote-Clients ein: " NFS_CLIENT_USER
-            read -s -p "Geben Sie das Passwort des weiteren Remote-Clients ein: " NFS_CLIENT_PASSWORD
-            echo
-            echo "$NFS_EXPORT_DIR $NFS_CLIENT_IP(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports
-            echo "$USER_PASSWORD" | sudo -S exportfs -a
-            echo "$USER_PASSWORD" | sudo -S ufw allow from "$NFS_CLIENT_IP" to any port nfs
-            echo "$USER_PASSWORD" | sudo -S ufw allow from "$NFS_CLIENT_IP" to any port 2049
-            configure_remote_client "$NFS_CLIENT_IP" "$NFS_CLIENT_USER" "$NFS_CLIENT_PASSWORD"
-            ;;
-        [Nn]* ) break;;
-        * ) echo "Bitte antworten Sie mit ja oder nein.";;
-    esac
-done
+# Function to configure NFS server
+configure_nfs_server() {
+    echo "Konfigurieren des NFS-Exports..."
+    if ! dpkg -l | grep -q nfs-kernel-server; then
+        echo "$USER_PASSWORD" | sudo -S apt-get update
+        echo "$USER_PASSWORD" | sudo -S apt-get install -y nfs-kernel-server
+    fi
+    echo "$NFS_EXPORT_DIR *(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports
 
-# Temporäre Sudoers-Datei entfernen
-remove_sudoers_temp
+    echo "Setze Verzeichnisberechtigungen..."
+    sudo chown -R nobody:nogroup "$NFS_EXPORT_DIR"
+    sudo chmod -R 777 "$NFS_EXPORT_DIR"
 
-echo "NFS-Konfiguration abgeschlossen. Überprüfen Sie die Mounts auf den Remote-Clients."
+    echo "NFS-Dienst aktivieren und starten..."
+    echo "$USER_PASSWORD" | sudo -S systemctl enable nfs-kernel-server
+    echo "$USER_PASSWORD" | sudo -S systemctl start nfs-kernel-server
+    echo "$USER_PASSWORD" | sudo -S exportfs -a
+
+    if ! systemctl is-active --quiet nfs-kernel-server; then
+        echo "NFS-Dienst läuft nicht, versuche Neustart..."
+        echo "$USER_PASSWORD" | sudo -S systemctl restart nfs-kernel-server
+        if [ $? -ne 0 ]; then
+            echo "NFS-Dienst konnte nicht neu gestartet werden."
+            remove_sudoers_temp
+            exit 1
+        else
+            echo "NFS-Dienst erfolgreich neu gestartet."
+        fi
+    else
+        echo "NFS-Dienst läuft."
+    fi
+}
+
+# Function to configure firewall
+configure_firewall() {
+    echo "Konfigurieren der Firewall..."
+    echo "$USER_PASSWORD" | sudo -S ufw allow from any to any port nfs
+    echo "$USER_PASSWORD" | sudo -S ufw allow from any to any port 2049
+}
+
+# Main function
+main() {
+    prompt_sudo_password
+    create_sudoers_temp
+
+    format_nvme_drive
+    mount_nvme_drive
+    configure_nfs_server
+    configure_firewall
+
+    # Configure additional remote clients if needed
+    while true; do
+        read -p "Möchten Sie einen weiteren Remote-Client einrichten? (ja/nein): " yn
+        case $yn in
+            [Jj]* )
+                read -p "Geben Sie die IP-Adresse des weiteren Remote-Clients ein: " NFS_CLIENT_IP
+                read -p "Geben Sie den Benutzernamen des weiteren Remote-Clients ein: " NFS_CLIENT_USER
+                read -s -p "Geben Sie das Passwort des weiteren Remote-Clients ein: " NFS_CLIENT_PASSWORD
+                echo
+                echo "$NFS_EXPORT_DIR $NFS_CLIENT_IP(rw,sync,no_subtree_check)" | sudo tee -a /etc/exports
+                echo "$USER_PASSWORD" | sudo -S exportfs -a
+                echo "$USER_PASSWORD" | sudo -S ufw allow from "$NFS_CLIENT_IP" to any port nfs
+                echo "$USER_PASSWORD" | sudo -S ufw allow from "$NFS_CLIENT_IP" to any port 2049
+                configure_remote_client "$NFS_CLIENT_IP" "$NFS_CLIENT_USER" "$NFS_CLIENT_PASSWORD"
+                ;;
+            [Nn]* ) break;;
+            * ) echo "Bitte antworten Sie mit ja oder nein.";;
+        esac
+    done
+
+    remove_sudoers_temp
+    echo "NFS-Konfiguration abgeschlossen. Überprüfen Sie die Mounts auf den Remote-Clients."
+}
+
+main
